@@ -21,6 +21,8 @@
  *
  */
 #define DEBUG_APP_ID "1WIM"
+#define DEBUG_ENABLED   DEBUG_1WIRE_MGR_ENABLED
+#define DEBUG_LEVEL     DEBUG_1WIRE_MGR_LEVEL
 
 #include "1wire_mgr.h"
 #include "1wire.h"
@@ -42,13 +44,13 @@ static void wire_mgr_main(void)
 {
     static uint32_t time = 0u;
 
-    DEBUG("Status %d\n", state);
+    DEBUG(DL_DEBUG, "Status %d\n", state);
     switch(state)
     {
         case START_CONVERSION:
             if(!WIRE_reset())
             {
-                DEBUG("%s", "No Presence\n");
+                DEBUG(DL_DEBUG, "%s", "No Presence\n");
             }
             else
             {
@@ -75,7 +77,7 @@ static void wire_mgr_main(void)
                 uint8_t msb = WIRE_read_byte();
                 temperature = (msb << 8U)|lsb;
                 state = START_CONVERSION;
-                DEBUG("1WIRE: %x\n", temperature);
+                DEBUG(DL_INFO, "1WIRE: %x\n", temperature);
             }
             break;
     }
