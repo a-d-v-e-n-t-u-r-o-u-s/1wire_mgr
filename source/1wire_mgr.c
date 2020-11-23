@@ -42,13 +42,13 @@ static void wire_mgr_main(void)
 {
     static uint32_t time = 0u;
 
-    //DEBUG_output("Status %d\n", state);
+    DEBUG("Status %d\n", state);
     switch(state)
     {
         case START_CONVERSION:
             if(!WIRE_reset())
             {
-                DEBUG_output("No Presence\n");
+                DEBUG("%s", "No Presence\n");
             }
             else
             {
@@ -75,7 +75,7 @@ static void wire_mgr_main(void)
                 uint8_t msb = WIRE_read_byte();
                 temperature = (msb << 8U)|lsb;
                 state = START_CONVERSION;
-                DEBUG_output("1WIRE: %x\n", temperature);
+                DEBUG("1WIRE: %x\n", temperature);
             }
             break;
     }
