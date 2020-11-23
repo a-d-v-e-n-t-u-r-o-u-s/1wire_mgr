@@ -27,5 +27,5 @@
 #include <stdint.h>
 
 uint16_t WIRE_MGR_get_temperature(void);
-int8_t WIRE_MGR_initialize(void);
+void WIRE_MGR_initialize(void);
 #endif

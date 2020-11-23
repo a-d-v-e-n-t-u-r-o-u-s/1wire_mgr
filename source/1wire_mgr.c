@@ -20,6 +20,8 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
  */
+#define DEBUG_APP_ID "1WIM"
+
 #include "1wire_mgr.h"
 #include "1wire.h"
 #include "system.h"
@@ -84,12 +86,10 @@ uint16_t WIRE_MGR_get_temperature(void)
     return temperature;
 }
 
-int8_t WIRE_MGR_initialize(void)
+void WIRE_MGR_initialize(void)
 {
-    if(SYSTEM_register_task(wire_mgr_main, 1000) != 0)
-    {
-        return -1;
-    }
+    int8_t ret = SYSTEM_register_task(wire_mgr_main, 1000);
 
-    return 0;
+    (void) ret;
+    ASSERT(ret == 0);
 }
