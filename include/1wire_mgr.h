@@ -25,7 +25,13 @@
 #define IWIRE_MGR_H
 
 #include <stdint.h>
+#include <stdbool.h>
+
+typedef struct
+{
+    bool is_crc;
+} WIRE_MGR_config_t;
 
 uint16_t WIRE_MGR_get_temperature(void);
-void WIRE_MGR_initialize(void);
+void WIRE_MGR_initialize(const WIRE_MGR_config_t *config);
 #endif

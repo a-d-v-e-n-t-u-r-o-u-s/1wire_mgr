@@ -31,11 +31,19 @@
 #include "system_timer.h"
 #include <stddef.h>
 
+
+#define LOG_SUCCESS                 (0U)
+#define LOG_CRC_ERROR               (1U)
+#define LOG_NO_PRESENCE_ERROR       (2U)
+#define LOG_SENTINEL                (3U)
+
+
 typedef enum
 {
     START_CONVERSION,
     WAIT_FOR_CONVERTION,
     READ_CONVERSION_RESULT,
+    LOG_CONVERSION_RESULT,
 } WIRE_state_t;
 
 typedef union
@@ -56,8 +64,11 @@ typedef union
 } WIRE_scratchpad_space_t;
 
 static WIRE_state_t state;
+static uint8_t result;
+static uint8_t log[LOG_SENTINEL];
 static uint16_t temperature;
 static WIRE_scratchpad_space_t scratchpad;
+static WIRE_MGR_config_t const *wire_config;
 
 static uint8_t calc_crc(uint8_t crc, uint8_t data)
 {
@@ -96,19 +107,76 @@ static uint8_t calc_crc_block(uint8_t crc, const uint8_t * buffer, size_t len)
     return crc;
 }
 
+static WIRE_state_t handle_read_conversion_results(bool is_crc)
+{
+    if(!WIRE_reset())
+    {
+        result = LOG_NO_PRESENCE_ERROR;
+        return LOG_CONVERSION_RESULT;
+    }
+
+    WIRE_send_byte(0xCC);
+    WIRE_send_byte(0xBE);
+
+    scratchpad.temp_lsb = WIRE_read_byte();
+    scratchpad.temp_msb = WIRE_read_byte();
+
+    if(is_crc)
+    {
+        for(uint8_t i = 2u; i < 9u; i++)
+        {
+            scratchpad.raw[i] = WIRE_read_byte();
+        }
+
+        DEBUG_DUMP_HEX(DL_DEBUG, scratchpad.raw,
+                sizeof(scratchpad.raw)/sizeof(scratchpad.raw[0]));
+
+        uint8_t crc = calc_crc_block(0U, scratchpad.raw, 8u);
+
+        if(crc != scratchpad.crc)
+        {
+            DEBUG(DL_ERROR, "CRC error exp 0x%02x calc 0x%02x\n",
+                    scratchpad.crc, crc);
+            result = LOG_CRC_ERROR;
+            return LOG_CONVERSION_RESULT;
+        }
+    }
+
+    temperature = (scratchpad.temp_msb << 8U)|scratchpad.temp_lsb;
+    result = LOG_SUCCESS;
+    return LOG_CONVERSION_RESULT;
+}
+
+static WIRE_state_t handle_log_conversion_results(void)
+{
+    switch(result)
+    {
+        case LOG_SUCCESS:
+            DEBUG(DL_INFO, "1WIRE: 0x%04x\n", temperature);
+            break;
+        case LOG_CRC_ERROR:
+            break;
+        case LOG_NO_PRESENCE_ERROR:
+            DEBUG(DL_WARNING, "%s", "No Presence\n");
+            break;
+        default:
+            ASSERT(false);
+    }
+
+    log[result]++;
+    DEBUG(DL_INFO, "OK[%d] CRC[%d] PRE[%d]\n", log[0],log[1],log[2]);
+    return START_CONVERSION;
+}
+
 static void wire_mgr_main(void)
 {
     static uint32_t time = 0u;
 
-    DEBUG(DL_ERROR, "State %d\n", state);
+    DEBUG(DL_VERBOSE, "State %d\n", state);
     switch(state)
     {
         case START_CONVERSION:
-            if(!WIRE_reset())
-            {
-                DEBUG(DL_WARNING, "%s", "No Presence\n");
-            }
-            else
+            if(WIRE_reset())
             {
                 WIRE_send_byte(0xCC);
                 WIRE_send_byte(0x44);
@@ -125,33 +193,11 @@ static void wire_mgr_main(void)
             break;
         case READ_CONVERSION_RESULT:
             {
-                WIRE_reset();
-                WIRE_send_byte(0xCC);
-                WIRE_send_byte(0xBE);
-
-                for(uint32_t i = 0u; i < 9u; i++)
-                {
-                    scratchpad.raw[i] = WIRE_read_byte();
-                }
-
-                DEBUG_DUMP(DL_DEBUG, scratchpad.raw,
-                        sizeof(scratchpad.raw)/sizeof(scratchpad.raw[0]));
-
-                uint8_t crc = calc_crc_block(0U, scratchpad.raw, 8u);
-
-                if(crc == scratchpad.crc)
-                {
-                    temperature = (scratchpad.temp_msb << 8U)|scratchpad.temp_lsb;
-                    DEBUG(DL_INFO, "1WIRE: %x\n", temperature);
-                }
-                else
-                {
-                    DEBUG(DL_ERROR, "CRC error exp 0x%02x calc 0x%02x\n",
-                            scratchpad.crc, crc);
-                }
-
-                state = START_CONVERSION;
+                state = handle_read_conversion_results(wire_config->is_crc);
             }
+            break;
+        case LOG_CONVERSION_RESULT:
+                state = handle_log_conversion_results();
             break;
     }
 }
@@ -161,10 +207,14 @@ uint16_t WIRE_MGR_get_temperature(void)
     return temperature;
 }
 
-void WIRE_MGR_initialize(void)
+void WIRE_MGR_initialize(const WIRE_MGR_config_t *config)
 {
+    ASSERT(config != NULL);
+
     int8_t ret = SYSTEM_register_task(wire_mgr_main, 1000);
 
     (void) ret;
     ASSERT(ret == 0);
+
+    wire_config = config;
 }
