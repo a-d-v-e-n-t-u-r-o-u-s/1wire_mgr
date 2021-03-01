@@ -155,6 +155,7 @@ static WIRE_state_t handle_log_conversion_results(void)
             DEBUG(DL_INFO, "1WIRE: 0x%04x\n", temperature);
             break;
         case LOG_CRC_ERROR:
+            DEBUG(DL_WARNING, "%s", "CRC error\n");
             break;
         case LOG_NO_PRESENCE_ERROR:
             DEBUG(DL_WARNING, "%s", "No Presence\n");
