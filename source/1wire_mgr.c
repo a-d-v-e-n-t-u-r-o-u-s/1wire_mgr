@@ -31,12 +31,25 @@
 #include "system_timer.h"
 #include <stddef.h>
 
-
 #define LOG_SUCCESS                 (0U)
 #define LOG_CRC_ERROR               (1U)
 #define LOG_NO_PRESENCE_ERROR       (2U)
 #define LOG_SENTINEL                (3U)
 
+/* ROM commands */
+#define SEARCH_ROM                  (0xF0U)
+#define READ_ROM                    (0x33U)
+#define MATCH_ROM                   (0x55U)
+#define SKIP_ROM                    (0xCCU)
+#define ALARM_SEARCH                (0xECU)
+
+/* Function commands */
+#define CONVERT_T                   (0x44U)
+#define WRITE_SCRATCHPAD            (0x4EU)
+#define READ_SCRATCHPAD             (0xBEU)
+#define COPY_SCRATCHPAD             (0x48U)
+#define RECALL_EEPROM               (0xB8U)
+#define READ_POWER_SUPPLY           (0xB4U)
 
 typedef enum
 {
@@ -115,8 +128,8 @@ static WIRE_state_t handle_read_conversion_results(bool is_crc)
         return LOG_CONVERSION_RESULT;
     }
 
-    WIRE_send_byte(0xCC);
-    WIRE_send_byte(0xBE);
+    WIRE_send_byte(SKIP_ROM);
+    WIRE_send_byte(READ_SCRATCHPAD);
 
     scratchpad.temp_lsb = WIRE_read_byte();
     scratchpad.temp_msb = WIRE_read_byte();
@@ -179,8 +192,8 @@ static void wire_mgr_main(void)
         case START_CONVERSION:
             if(WIRE_reset())
             {
-                WIRE_send_byte(0xCC);
-                WIRE_send_byte(0x44);
+                WIRE_send_byte(SKIP_ROM);
+                WIRE_send_byte(CONVERT_T);
                 state = WAIT_FOR_CONVERTION;
                 time = SYSTEM_timer_get_tick();
             }
