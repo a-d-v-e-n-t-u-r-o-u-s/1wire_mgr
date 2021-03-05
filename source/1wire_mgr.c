@@ -224,11 +224,6 @@ uint16_t WIRE_MGR_get_temperature(void)
 void WIRE_MGR_initialize(const WIRE_MGR_config_t *config)
 {
     ASSERT(config != NULL);
-
-    int8_t ret = SYSTEM_register_task(wire_mgr_main, 1000);
-
-    (void) ret;
-    ASSERT(ret == 0);
-
+    SYSTEM_register_task(wire_mgr_main, 1000);
     wire_config = config;
 }
