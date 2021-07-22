@@ -30,6 +30,7 @@
 #include "debug.h"
 #include "system_timer.h"
 #include <stddef.h>
+#include <avr/pgmspace.h>
 
 #define LOG_SUCCESS                 (0U)
 #define LOG_CRC_ERROR               (1U)
@@ -86,7 +87,7 @@ static WIRE_MGR_config_t const *wire_config;
 static uint8_t calc_crc(uint8_t crc, uint8_t data)
 {
     // https://www.maximintegrated.com/en/app-notes/index.mvp/id/27
-    static const uint8_t table[256] = {
+    static const uint8_t table[256] PROGMEM = {
             0, 94, 188, 226, 97, 63, 221, 131, 194, 156, 126, 32, 163, 253, 31, 65,
             157, 195, 33, 127, 252, 162, 64, 30, 95, 1, 227, 189, 62, 96, 130, 220,
             35, 125, 159, 193, 66, 28, 254, 160, 225, 191, 93, 3, 128, 222, 60, 98,
@@ -105,7 +106,7 @@ static uint8_t calc_crc(uint8_t crc, uint8_t data)
             116, 42, 200, 150, 21, 75, 169, 247, 182, 232, 10, 84, 215, 137, 107, 53
     };
 
-    return table[crc ^ data];
+    return pgm_read_byte(&table[crc ^ data]);
 }
 
 static uint8_t calc_crc_block(uint8_t crc, const uint8_t * buffer, size_t len)
