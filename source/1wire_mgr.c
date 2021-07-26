@@ -156,7 +156,7 @@ static WIRE_state_t handle_read_conversion_results(bool is_crc)
         }
     }
 
-    temperature = ((uint16_t)(scratchpad.temp_msb << 8U)) | scratchpad.temp_lsb;
+    temperature = ((uint16_t)((uint16_t)scratchpad.temp_msb << 8U)) | scratchpad.temp_lsb;
     result = LOG_SUCCESS;
     return LOG_CONVERSION_RESULT;
 }
