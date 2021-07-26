@@ -80,7 +80,7 @@ typedef union
 
 static WIRE_state_t state;
 static uint8_t result;
-static uint8_t log[LOG_SENTINEL];
+static uint8_t wire_mgr_log[LOG_SENTINEL];
 static uint16_t temperature;
 static WIRE_scratchpad_space_t scratchpad;
 
@@ -178,14 +178,15 @@ static WIRE_state_t handle_log_conversion_results(void)
             ASSERT(false);
     }
 
-    log[result]++;
-    DEBUG(DL_INFO, "OK[%d] CRC[%d] PRE[%d]\n", log[0],log[1],log[2]);
+    wire_mgr_log[result]++;
+    DEBUG(DL_INFO, "OK[%d] CRC[%d] PRE[%d]\n",
+            wire_mgr_log[0], wire_mgr_log[1], wire_mgr_log[2]);
     return START_CONVERSION;
 }
 
 static void wire_mgr_main(void)
 {
-    static uint32_t time = 0u;
+    static uint32_t start_conv_time= 0u;
 
     DEBUG(DL_VERBOSE, "State %d\n", state);
     switch(state)
@@ -196,11 +197,11 @@ static void wire_mgr_main(void)
                 WIRE_send_byte(SKIP_ROM);
                 WIRE_send_byte(CONVERT_T);
                 state = WAIT_FOR_CONVERTION;
-                time = SYSTEM_timer_get_tick();
+                start_conv_time = SYSTEM_timer_get_tick();
             }
             break;
         case WAIT_FOR_CONVERTION:
-            if(SYSTEM_timer_tick_difference(time,
+            if(SYSTEM_timer_tick_difference(start_conv_time,
                         SYSTEM_timer_get_tick()) > 750)
             {
                 state = READ_CONVERSION_RESULT;
@@ -214,6 +215,9 @@ static void wire_mgr_main(void)
             break;
         case LOG_CONVERSION_RESULT:
                 state = handle_log_conversion_results();
+            break;
+        default:
+            ASSERT(false);
             break;
     }
 }
