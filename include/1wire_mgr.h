@@ -33,5 +33,5 @@ typedef struct
 } WIRE_MGR_config_t;
 
 uint16_t WIRE_MGR_get_temperature(void);
-void WIRE_MGR_initialize(const WIRE_MGR_config_t *config);
+void WIRE_MGR_initialize(void);
 #endif

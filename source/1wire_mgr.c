@@ -31,6 +31,7 @@
 #include "system_timer.h"
 #include <stddef.h>
 #include <avr/pgmspace.h>
+#include "hardware.h"
 
 #define LOG_SUCCESS                 (0U)
 #define LOG_CRC_ERROR               (1U)
@@ -82,7 +83,6 @@ static uint8_t result;
 static uint8_t log[LOG_SENTINEL];
 static uint16_t temperature;
 static WIRE_scratchpad_space_t scratchpad;
-static WIRE_MGR_config_t const *wire_config;
 
 static uint8_t calc_crc(uint8_t crc, uint8_t data)
 {
@@ -156,7 +156,7 @@ static WIRE_state_t handle_read_conversion_results(bool is_crc)
         }
     }
 
-    temperature = ((uint16_t)((uint16_t)scratchpad.temp_msb << 8U)) | scratchpad.temp_lsb;
+    temperature = ((uint16_t)(scratchpad.temp_msb << 8U)) | scratchpad.temp_lsb;
     result = LOG_SUCCESS;
     return LOG_CONVERSION_RESULT;
 }
@@ -208,7 +208,8 @@ static void wire_mgr_main(void)
             break;
         case READ_CONVERSION_RESULT:
             {
-                state = handle_read_conversion_results(wire_config->is_crc);
+                const bool is_crc = pgm_read_byte(&wire_mgr_config.is_crc);
+                state = handle_read_conversion_results(is_crc);
             }
             break;
         case LOG_CONVERSION_RESULT:
@@ -222,9 +223,7 @@ uint16_t WIRE_MGR_get_temperature(void)
     return temperature;
 }
 
-void WIRE_MGR_initialize(const WIRE_MGR_config_t *config)
+void WIRE_MGR_initialize(void)
 {
-    ASSERT(config != NULL);
     SYSTEM_register_task(wire_mgr_main, 1000);
-    wire_config = config;
 }
