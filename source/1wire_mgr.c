@@ -87,7 +87,7 @@ static WIRE_scratchpad_space_t scratchpad;
 
 static uint8_t calc_crc(uint8_t crc, uint8_t data)
 {
-    // https://www.maximintegrated.com/en/app-notes/index.mvp/id/27
+    /* https://www.maximintegrated.com/en/app-notes/index.mvp/id/27 */
     static const uint8_t table[256] PROGMEM = {
             0, 94, 188, 226, 97, 63, 221, 131, 194, 156, 126, 32, 163, 253, 31, 65,
             157, 195, 33, 127, 252, 162, 64, 30, 95, 1, 227, 189, 62, 96, 130, 220,
@@ -110,16 +110,20 @@ static uint8_t calc_crc(uint8_t crc, uint8_t data)
     return pgm_read_byte(&table[crc ^ data]);
 }
 
-static uint8_t calc_crc_block(uint8_t crc, const uint8_t * buffer, size_t len)
+static uint8_t calc_crc_block(uint8_t crc, const uint8_t * buffer, size_t length)
 {
+    const uint8_t *buff = buffer;
+    size_t len = length;
+    uint8_t ret = crc;
+
     do
     {
-        crc = calc_crc(crc, *buffer++);
-        DEBUG(DL_VERBOSE, "buffer 0x%02x, crc 0x%02x, len %d\n", (uint8_t)*(buffer - 1),
-                crc, len);
+        ret = calc_crc(ret, *buff++);
+        DEBUG(DL_VERBOSE, "buffer 0x%02x, crc 0x%02x, len %d\n", (uint8_t)*(buff - 1),
+                ret, len);
     }
     while (--len > 0);
-    return crc;
+    return ret;
 }
 
 static WIRE_state_t handle_start_conversion(void)
@@ -151,8 +155,10 @@ static WIRE_state_t handle_wait_for_conversion(void)
     }
 }
 
-static WIRE_state_t handle_read_conversion_results(bool is_crc)
+static WIRE_state_t handle_read_conversion_results(void)
 {
+    const bool is_crc = pgm_read_byte(&wire_mgr_config.is_crc);
+
     if(!WIRE_reset())
     {
         result = LOG_NO_PRESENCE_ERROR;
@@ -186,7 +192,7 @@ static WIRE_state_t handle_read_conversion_results(bool is_crc)
         }
     }
 
-    temperature = ((uint16_t)((uint16_t)scratchpad.temp_msb << 8U)) | scratchpad.temp_lsb;
+    temperature = (((uint16_t)scratchpad.temp_msb << 8U)) | scratchpad.temp_lsb;
     result = LOG_SUCCESS;
     return LOG_CONVERSION_RESULT;
 }
@@ -227,10 +233,7 @@ static void wire_mgr_main(void)
             state = handle_wait_for_conversion();
             break;
         case READ_CONVERSION_RESULT:
-            {
-                const bool is_crc = pgm_read_byte(&wire_mgr_config.is_crc);
-                state = handle_read_conversion_results(is_crc);
-            }
+            state = handle_read_conversion_results();
             break;
         case LOG_CONVERSION_RESULT:
             state = handle_log_conversion_results();
