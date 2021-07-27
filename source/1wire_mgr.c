@@ -121,8 +121,9 @@ static uint8_t calc_crc_block(uint8_t crc, const uint8_t * buffer, size_t length
         ret = calc_crc(ret, *buff);
         DEBUG(DL_VERBOSE, "buffer 0x%02x, crc 0x%02x, len %d\n", *buff, ret, len);
         buff++;
+        len--;
     }
-    while (--len > 0);
+    while (len > 0);
 
     return ret;
 }
@@ -138,7 +139,7 @@ static WIRE_state_t handle_start_conversion(void)
     }
     else
     {
-        /*! \todo think about some timeout here */
+        /*! TODO(DB) think about some timeout here */
         return START_CONVERSION;
     }
 }
