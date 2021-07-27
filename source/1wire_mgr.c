@@ -118,11 +118,12 @@ static uint8_t calc_crc_block(uint8_t crc, const uint8_t * buffer, size_t length
 
     do
     {
-        ret = calc_crc(ret, *buff++);
-        DEBUG(DL_VERBOSE, "buffer 0x%02x, crc 0x%02x, len %d\n", (uint8_t)*(buff - 1),
-                ret, len);
+        ret = calc_crc(ret, *buff);
+        DEBUG(DL_VERBOSE, "buffer 0x%02x, crc 0x%02x, len %d\n", *buff, ret, len);
+        buff++;
     }
     while (--len > 0);
+
     return ret;
 }
 
@@ -192,7 +193,7 @@ static WIRE_state_t handle_read_conversion_results(void)
         }
     }
 
-    temperature = (((uint16_t)scratchpad.temp_msb << 8U)) | scratchpad.temp_lsb;
+    temperature = ((uint16_t)scratchpad.temp_msb << 8U) | scratchpad.temp_lsb;
     result = LOG_SUCCESS;
     return LOG_CONVERSION_RESULT;
 }
