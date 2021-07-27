@@ -82,6 +82,7 @@ static WIRE_state_t state;
 static uint8_t result;
 static uint8_t wire_mgr_log[LOG_SENTINEL];
 static uint16_t temperature;
+static uint32_t start_conv_time;
 static WIRE_scratchpad_space_t scratchpad;
 
 static uint8_t calc_crc(uint8_t crc, uint8_t data)
@@ -119,6 +120,35 @@ static uint8_t calc_crc_block(uint8_t crc, const uint8_t * buffer, size_t len)
     }
     while (--len > 0);
     return crc;
+}
+
+static WIRE_state_t handle_start_conversion(void)
+{
+    if(WIRE_reset())
+    {
+        WIRE_send_byte(SKIP_ROM);
+        WIRE_send_byte(CONVERT_T);
+        start_conv_time = SYSTEM_timer_get_tick();
+        return WAIT_FOR_CONVERTION;
+    }
+    else
+    {
+        /*! \todo think about some timeout here */
+        return START_CONVERSION;
+    }
+}
+
+static WIRE_state_t handle_wait_for_conversion(void)
+{
+    if(SYSTEM_timer_tick_difference(start_conv_time,
+                SYSTEM_timer_get_tick()) > 750)
+    {
+        return READ_CONVERSION_RESULT;
+    }
+    else
+    {
+        return WAIT_FOR_CONVERTION;
+    }
 }
 
 static WIRE_state_t handle_read_conversion_results(bool is_crc)
@@ -186,26 +216,15 @@ static WIRE_state_t handle_log_conversion_results(void)
 
 static void wire_mgr_main(void)
 {
-    static uint32_t start_conv_time= 0u;
 
     DEBUG(DL_VERBOSE, "State %d\n", state);
     switch(state)
     {
         case START_CONVERSION:
-            if(WIRE_reset())
-            {
-                WIRE_send_byte(SKIP_ROM);
-                WIRE_send_byte(CONVERT_T);
-                state = WAIT_FOR_CONVERTION;
-                start_conv_time = SYSTEM_timer_get_tick();
-            }
+            state = handle_start_conversion();
             break;
         case WAIT_FOR_CONVERTION:
-            if(SYSTEM_timer_tick_difference(start_conv_time,
-                        SYSTEM_timer_get_tick()) > 750)
-            {
-                state = READ_CONVERSION_RESULT;
-            }
+            state = handle_wait_for_conversion();
             break;
         case READ_CONVERSION_RESULT:
             {
@@ -214,7 +233,7 @@ static void wire_mgr_main(void)
             }
             break;
         case LOG_CONVERSION_RESULT:
-                state = handle_log_conversion_results();
+            state = handle_log_conversion_results();
             break;
         default:
             ASSERT(false);
