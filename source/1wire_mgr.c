@@ -30,6 +30,7 @@
 #include "debug.h"
 #include "system_timer.h"
 #include <stddef.h>
+#include <limits.h>
 #include <avr/pgmspace.h>
 #include "hardware.h"
 
@@ -52,6 +53,9 @@
 #define COPY_SCRATCHPAD             (0x48U)
 #define RECALL_EEPROM               (0xB8U)
 #define READ_POWER_SUPPLY           (0xB4U)
+
+#define CONVERTION_TIME_12BIT       (750u)
+#define TASK_PERIOD                 (1000u)
 
 typedef enum
 {
@@ -147,7 +151,7 @@ static WIRE_state_t handle_start_conversion(void)
 static WIRE_state_t handle_wait_for_conversion(void)
 {
     if(SYSTEM_timer_tick_difference(start_conv_time,
-                SYSTEM_timer_get_tick()) > 750)
+                SYSTEM_timer_get_tick()) > CONVERTION_TIME_12BIT)
     {
         return READ_CONVERSION_RESULT;
     }
@@ -175,13 +179,15 @@ static WIRE_state_t handle_read_conversion_results(void)
 
     if(is_crc)
     {
-        for(uint8_t i = 2u; i < 9u; i++)
+        const uint8_t scratchpad_size =
+            sizeof(scratchpad.raw)/sizeof(scratchpad.raw[0]);
+
+        for(uint8_t i = 2u; i < scratchpad_size; i++)
         {
             scratchpad.raw[i] = WIRE_read_byte();
         }
 
-        DEBUG_DUMP_HEX(DL_DEBUG, scratchpad.raw,
-                sizeof(scratchpad.raw)/sizeof(scratchpad.raw[0]));
+        DEBUG_DUMP_HEX(DL_DEBUG, scratchpad.raw, scratchpad_size);
 
         uint8_t crc = calc_crc_block(0U, scratchpad.raw, 8u);
 
@@ -194,7 +200,7 @@ static WIRE_state_t handle_read_conversion_results(void)
         }
     }
 
-    temperature = ((uint16_t)scratchpad.temp_msb << 8U) | scratchpad.temp_lsb;
+    temperature = ((uint16_t)scratchpad.temp_msb << CHAR_BIT) | scratchpad.temp_lsb;
     result = LOG_SUCCESS;
     return LOG_CONVERSION_RESULT;
 }
@@ -253,5 +259,5 @@ uint16_t WIRE_MGR_get_temperature(void)
 
 void WIRE_MGR_initialize(void)
 {
-    SYSTEM_register_task(wire_mgr_main, 1000);
+    SYSTEM_register_task(wire_mgr_main, TASK_PERIOD);
 }
