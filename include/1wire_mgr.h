@@ -27,9 +27,15 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#define WIRE_9BIT_RESOLUTION            (0u)
+#define WIRE_10BIT_RESOLUTION           (1u)
+#define WIRE_11BIT_RESOLUTION           (2u)
+#define WIRE_12BIT_RESOLUTION           (3u)
+
 typedef struct
 {
     bool is_crc;
+    uint8_t resolution;
 } WIRE_MGR_config_t;
 
 uint16_t WIRE_MGR_get_temperature(void);

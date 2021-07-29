@@ -54,7 +54,20 @@
 #define RECALL_EEPROM               (0xB8U)
 #define READ_POWER_SUPPLY           (0xB4U)
 
-#define CONVERTION_TIME_12BIT       (750u)
+/* Configuration register masks */
+#define RESOLUTION_9BIT_MASK        (0x1Fu)
+#define RESOLUTION_10BIT_MASK       (0x3Fu)
+#define RESOLUTION_11BIT_MASK       (0x5Fu)
+#define RESOLUTION_12BIT_MASK       (0x7Fu)
+
+
+#define CONVERSION_TIME_9BIT        (94u)
+#define CONVERSION_TIME_10BIT       (188u)
+#define CONVERSION_TIME_11BIT       (375u)
+#define CONVERSION_TIME_12BIT       (750u)
+
+
+
 #define TASK_PERIOD                 (1000u)
 
 typedef enum
@@ -86,8 +99,45 @@ static WIRE_state_t state;
 static uint8_t result;
 static uint8_t wire_mgr_log[LOG_SENTINEL];
 static uint16_t temperature;
+static uint16_t conversion_time;
 static uint32_t start_conv_time;
 static WIRE_scratchpad_space_t scratchpad;
+
+static inline uint16_t get_resolution_conv_time(uint8_t resolution)
+{
+    switch(resolution)
+    {
+        case WIRE_9BIT_RESOLUTION:
+            return CONVERSION_TIME_9BIT;
+        case WIRE_10BIT_RESOLUTION:
+            return CONVERSION_TIME_10BIT;
+        case WIRE_11BIT_RESOLUTION:
+            return CONVERSION_TIME_11BIT;
+        case WIRE_12BIT_RESOLUTION:
+            return CONVERSION_TIME_12BIT;
+        default:
+            ASSERT(false);
+            break;
+    }
+}
+
+static inline uint8_t get_resolution_mask(uint8_t resolution)
+{
+    switch(resolution)
+    {
+        case WIRE_9BIT_RESOLUTION:
+            return RESOLUTION_9BIT_MASK;
+        case WIRE_10BIT_RESOLUTION:
+            return RESOLUTION_10BIT_MASK;
+        case WIRE_11BIT_RESOLUTION:
+            return RESOLUTION_11BIT_MASK;
+        case WIRE_12BIT_RESOLUTION:
+            return RESOLUTION_12BIT_MASK;
+        default:
+            ASSERT(false);
+            break;
+    }
+}
 
 static uint8_t calc_crc(uint8_t crc, uint8_t data)
 {
@@ -151,7 +201,7 @@ static WIRE_state_t handle_start_conversion(void)
 static WIRE_state_t handle_wait_for_conversion(void)
 {
     if(SYSTEM_timer_tick_difference(start_conv_time,
-                SYSTEM_timer_get_tick()) > CONVERTION_TIME_12BIT)
+                SYSTEM_timer_get_tick()) > conversion_time)
     {
         return READ_CONVERSION_RESULT;
     }
@@ -210,7 +260,8 @@ static WIRE_state_t handle_log_conversion_results(void)
     switch(result)
     {
         case LOG_SUCCESS:
-            DEBUG(DL_INFO, "1WIRE: 0x%04x\n", temperature);
+            DEBUG(DL_INFO, "1WIRE: 0x%04x[raw] %d.%04d[C]\n", temperature,
+                    temperature >> 4U, (temperature & 0xFu)*625u);
             break;
         case LOG_CRC_ERROR:
             DEBUG(DL_WARNING, "%s", "CRC error\n");
@@ -259,5 +310,48 @@ uint16_t WIRE_MGR_get_temperature(void)
 
 void WIRE_MGR_initialize(void)
 {
+    const uint8_t resolution = pgm_read_byte(&wire_mgr_config.resolution);
+
+    if(!WIRE_reset())
+    {
+        ASSERT(false);
+    }
+
+    WIRE_send_byte(SKIP_ROM);
+    WIRE_send_byte(READ_SCRATCHPAD);
+
+    const uint8_t scratchpad_size =
+        sizeof(scratchpad.raw)/sizeof(scratchpad.raw[0]);
+
+    for(uint8_t i = 0u; i < scratchpad_size; i++)
+    {
+        scratchpad.raw[i] = WIRE_read_byte();
+    }
+
+    if(!WIRE_reset())
+    {
+        ASSERT(false);
+    }
+
+    WIRE_send_byte(SKIP_ROM);
+    WIRE_send_byte(WRITE_SCRATCHPAD);
+    WIRE_send_byte(scratchpad.th);
+    WIRE_send_byte(scratchpad.tl);
+    WIRE_send_byte(get_resolution_mask(resolution));
+
+    if(!WIRE_reset())
+    {
+        ASSERT(false);
+    }
+
+    WIRE_send_byte(SKIP_ROM);
+    WIRE_send_byte(READ_SCRATCHPAD);
+
+    for(uint8_t i = 0u; i < scratchpad_size; i++)
+    {
+        scratchpad.raw[i] = WIRE_read_byte();
+    }
+
+    conversion_time = get_resolution_conv_time(resolution);
     SYSTEM_register_task(wire_mgr_main, TASK_PERIOD);
 }
