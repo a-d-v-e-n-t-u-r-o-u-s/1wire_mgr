@@ -37,7 +37,8 @@
 #define LOG_SUCCESS                 (0U)
 #define LOG_CRC_ERROR               (1U)
 #define LOG_NO_PRESENCE_ERROR       (2U)
-#define LOG_SENTINEL                (3U)
+#define LOG_FAKE_SENSOR_ERROR       (3u)
+#define LOG_SENTINEL                (4U)
 
 /* ROM commands */
 #define SEARCH_ROM                  (0xF0U)
@@ -60,22 +61,29 @@
 #define RESOLUTION_11BIT_MASK       (0x5Fu)
 #define RESOLUTION_12BIT_MASK       (0x7Fu)
 
-
 #define CONVERSION_TIME_9BIT        (94u)
 #define CONVERSION_TIME_10BIT       (188u)
 #define CONVERSION_TIME_11BIT       (375u)
 #define CONVERSION_TIME_12BIT       (750u)
 
+#define RESERVED1_VALUE             (0xFFu)
+#define RESERVED3_VALUE             (0x10u)
 
+#define FAMILY_CODE                 (0x28u)
 
 #define TASK_PERIOD                 (1000u)
 
 typedef enum
 {
+    WIRE_READ_ROM,
+    WIRE_READ_SCRATCHPAD,
+    WIRE_WRITE_SCRATCHPAD,
     START_CONVERSION,
     WAIT_FOR_CONVERTION,
     READ_CONVERSION_RESULT,
     LOG_CONVERSION_RESULT,
+    WIRE_ERROR_STATE,
+    WIRE_SENTINEL_STATE,
 } WIRE_state_t;
 
 typedef union
@@ -95,13 +103,44 @@ typedef union
     uint8_t raw[9];
 } WIRE_scratchpad_space_t;
 
+typedef union
+{
+    struct
+    {
+        uint8_t family_code;
+        uint8_t serial_no[6u];
+        uint8_t crc;
+    };
+    uint8_t raw[8];
+} WIRE_rom_code_space_t;
+
 static WIRE_state_t state;
+static WIRE_state_t old_state = WIRE_SENTINEL_STATE;
+static bool is_sensor_ready;
 static uint8_t result;
 static uint8_t wire_mgr_log[LOG_SENTINEL];
 static uint16_t temperature;
 static uint16_t conversion_time;
 static uint32_t start_conv_time;
 static WIRE_scratchpad_space_t scratchpad;
+static WIRE_rom_code_space_t rom_code;
+
+static inline bool is_reserved_values_valid(uint8_t res1, uint8_t res3)
+{
+    if((res1 == RESERVED1_VALUE) && (res3 == RESERVED3_VALUE))
+    {
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
+
+static inline uint16_t get_temperature(uint8_t msb, uint8_t lsb)
+{
+    return (((uint16_t) msb << CHAR_BIT) | lsb);
+}
 
 static inline uint16_t get_resolution_conv_time(uint8_t resolution)
 {
@@ -119,6 +158,8 @@ static inline uint16_t get_resolution_conv_time(uint8_t resolution)
             ASSERT(false);
             break;
     }
+
+    return CONVERSION_TIME_9BIT;
 }
 
 static inline uint8_t get_resolution_mask(uint8_t resolution)
@@ -137,6 +178,8 @@ static inline uint8_t get_resolution_mask(uint8_t resolution)
             ASSERT(false);
             break;
     }
+
+    return RESOLUTION_9BIT_MASK;
 }
 
 static uint8_t calc_crc(uint8_t crc, uint8_t data)
@@ -182,20 +225,136 @@ static uint8_t calc_crc_block(uint8_t crc, const uint8_t * buffer, size_t length
     return ret;
 }
 
-static WIRE_state_t handle_start_conversion(void)
+static bool is_crc_valid(uint8_t *buffer, uint8_t size, uint8_t exp_crc)
 {
-    if(WIRE_reset())
+    uint8_t crc = calc_crc_block(0U, buffer, size);
+
+    if(crc != exp_crc)
     {
-        WIRE_send_byte(SKIP_ROM);
-        WIRE_send_byte(CONVERT_T);
-        start_conv_time = SYSTEM_timer_get_tick();
-        return WAIT_FOR_CONVERTION;
+        DEBUG(DL_ERROR, "CRC error exp 0x%02x calc 0x%02x\n",
+                exp_crc, crc);
+        return false;
     }
     else
     {
-        /*! TODO(DB) think about some timeout here */
-        return START_CONVERSION;
+        return true;
     }
+}
+
+static void read_bytes(uint8_t *buffer, uint8_t size)
+{
+    for(uint8_t i = 0u; i < size; i++)
+    {
+        buffer[i] = WIRE_read_byte();
+    }
+
+    DEBUG_DUMP_HEX(DL_DEBUG, buffer, size);
+}
+
+static void read_scratchpad_bytes(void)
+{
+    const uint8_t scratchpad_size =
+        sizeof(scratchpad.raw)/sizeof(scratchpad.raw[0]);
+
+    WIRE_send_byte(SKIP_ROM);
+    WIRE_send_byte(READ_SCRATCHPAD);
+
+    read_bytes(scratchpad.raw, scratchpad_size);
+
+    DEBUG_DUMP_HEX(DL_DEBUG, scratchpad.raw, scratchpad_size);
+}
+
+static WIRE_state_t handle_read_rom(void)
+{
+    const bool is_crc = pgm_read_byte(&wire_mgr_config.is_crc);
+    const uint8_t rom_code_size =
+        sizeof(rom_code.raw)/sizeof(rom_code.raw[0]);
+
+    WIRE_send_byte(READ_ROM);
+
+    read_bytes(rom_code.raw, rom_code_size);
+
+    if(is_crc)
+    {
+        if(!is_crc_valid(rom_code.raw, rom_code_size - 1u, rom_code.crc))
+        {
+            result = LOG_CRC_ERROR;
+            return LOG_CONVERSION_RESULT;
+        }
+    }
+
+    if((rom_code.family_code != FAMILY_CODE) ||
+            (rom_code.serial_no[4] != 0u) ||
+            (rom_code.serial_no[5] != 0u))
+    {
+        const bool is_fake_allowed  = pgm_read_byte(&wire_mgr_config.is_fake_allowed);
+
+        DEBUG(is_fake_allowed ? DL_WARNING: DL_ERROR, "%s\n", "Invalid ROM code");
+
+        if(!is_fake_allowed)
+        {
+            result = LOG_FAKE_SENSOR_ERROR;
+            return LOG_CONVERSION_RESULT;
+        }
+    }
+
+    return WIRE_READ_SCRATCHPAD;
+}
+
+static WIRE_state_t handle_read_scratchpad(void)
+{
+    const bool is_crc = pgm_read_byte(&wire_mgr_config.is_crc);
+    const uint8_t scratchpad_size =
+        sizeof(scratchpad.raw)/sizeof(scratchpad.raw[0]);
+
+    read_scratchpad_bytes();
+
+    if(is_crc)
+    {
+        if(!is_crc_valid(scratchpad.raw, (scratchpad_size - 1u), scratchpad.crc))
+        {
+            result = LOG_CRC_ERROR;
+            return LOG_CONVERSION_RESULT;
+        }
+    }
+
+    if(!is_reserved_values_valid(scratchpad.reserved1, scratchpad.reserved3))
+    {
+        const bool is_fake_allowed  = pgm_read_byte(&wire_mgr_config.is_fake_allowed);
+
+        DEBUG(is_fake_allowed ? DL_WARNING: DL_ERROR, "%s\n", "Invalid reserved bytes");
+
+        if(!is_fake_allowed)
+        {
+            result = LOG_FAKE_SENSOR_ERROR;
+            return LOG_CONVERSION_RESULT;
+        }
+    }
+
+    temperature = get_temperature(scratchpad.temp_msb, scratchpad.temp_lsb);
+
+    return WIRE_WRITE_SCRATCHPAD;
+}
+
+static WIRE_state_t handle_write_scratchpad(void)
+{
+    const uint8_t resolution = pgm_read_byte(&wire_mgr_config.resolution);
+
+    WIRE_send_byte(SKIP_ROM);
+    WIRE_send_byte(WRITE_SCRATCHPAD);
+    WIRE_send_byte(scratchpad.th);
+    WIRE_send_byte(scratchpad.tl);
+    WIRE_send_byte(get_resolution_mask(resolution));
+    /* TODO(DB) here should be read back of register */
+    return START_CONVERSION;
+}
+
+static WIRE_state_t handle_start_conversion(void)
+{
+    WIRE_send_byte(SKIP_ROM);
+    WIRE_send_byte(CONVERT_T);
+    start_conv_time = SYSTEM_timer_get_tick();
+    return WAIT_FOR_CONVERTION;
 }
 
 static WIRE_state_t handle_wait_for_conversion(void)
@@ -214,44 +373,23 @@ static WIRE_state_t handle_wait_for_conversion(void)
 static WIRE_state_t handle_read_conversion_results(void)
 {
     const bool is_crc = pgm_read_byte(&wire_mgr_config.is_crc);
+    const uint8_t scratchpad_size =
+        sizeof(scratchpad.raw)/sizeof(scratchpad.raw[0]);
 
-    if(!WIRE_reset())
-    {
-        result = LOG_NO_PRESENCE_ERROR;
-        return LOG_CONVERSION_RESULT;
-    }
-
-    WIRE_send_byte(SKIP_ROM);
-    WIRE_send_byte(READ_SCRATCHPAD);
-
-    scratchpad.temp_lsb = WIRE_read_byte();
-    scratchpad.temp_msb = WIRE_read_byte();
+    read_scratchpad_bytes();
 
     if(is_crc)
     {
-        const uint8_t scratchpad_size =
-            sizeof(scratchpad.raw)/sizeof(scratchpad.raw[0]);
-
-        for(uint8_t i = 2u; i < scratchpad_size; i++)
+        if(!is_crc_valid(scratchpad.raw, (scratchpad_size - 1u), scratchpad.crc))
         {
-            scratchpad.raw[i] = WIRE_read_byte();
-        }
-
-        DEBUG_DUMP_HEX(DL_DEBUG, scratchpad.raw, scratchpad_size);
-
-        uint8_t crc = calc_crc_block(0U, scratchpad.raw, 8u);
-
-        if(crc != scratchpad.crc)
-        {
-            DEBUG(DL_ERROR, "CRC error exp 0x%02x calc 0x%02x\n",
-                    scratchpad.crc, crc);
             result = LOG_CRC_ERROR;
             return LOG_CONVERSION_RESULT;
         }
     }
 
-    temperature = ((uint16_t)scratchpad.temp_msb << CHAR_BIT) | scratchpad.temp_lsb;
+    temperature = get_temperature(scratchpad.temp_msb, scratchpad.temp_lsb);
     result = LOG_SUCCESS;
+    is_sensor_ready = true;
     return LOG_CONVERSION_RESULT;
 }
 
@@ -269,89 +407,121 @@ static WIRE_state_t handle_log_conversion_results(void)
         case LOG_NO_PRESENCE_ERROR:
             DEBUG(DL_WARNING, "%s", "No Presence\n");
             break;
+        case LOG_FAKE_SENSOR_ERROR:
+            DEBUG(DL_ERROR, "%s", "Fake sensor\n");
+            break;
         default:
             ASSERT(false);
     }
 
     wire_mgr_log[result]++;
-    DEBUG(DL_INFO, "OK[%d] CRC[%d] PRE[%d]\n",
-            wire_mgr_log[0], wire_mgr_log[1], wire_mgr_log[2]);
-    return START_CONVERSION;
+    DEBUG(DL_INFO, "OK[%d] CRC[%d] PRE[%d] FAKE[%d]\n",
+            wire_mgr_log[0], wire_mgr_log[1], wire_mgr_log[2], wire_mgr_log[3]);
+
+    switch(old_state)
+    {
+        case WIRE_SENTINEL_STATE:
+        case WIRE_READ_ROM:
+            if(result == LOG_FAKE_SENSOR_ERROR)
+            {
+                return WIRE_ERROR_STATE;
+            }
+            else
+            {
+                return WIRE_READ_ROM;
+            }
+        default:
+            return START_CONVERSION;
+    }
+}
+
+static WIRE_state_t handle_error_state(void)
+{
+    is_sensor_ready = false;
+    return WIRE_ERROR_STATE;
+}
+
+static WIRE_state_t handle_reset_needed_state(WIRE_state_t s)
+{
+    if(WIRE_reset())
+    {
+        switch(s)
+        {
+            case WIRE_READ_ROM:
+                return handle_read_rom();
+            case WIRE_READ_SCRATCHPAD:
+                return handle_read_scratchpad();
+            case WIRE_WRITE_SCRATCHPAD:
+                return handle_write_scratchpad();
+            case START_CONVERSION:
+                return handle_start_conversion();
+            case READ_CONVERSION_RESULT:
+                return handle_read_conversion_results();
+            default:
+                ASSERT(false);
+                break;
+        }
+
+        return WIRE_READ_ROM;
+    }
+    else
+    {
+        result = LOG_NO_PRESENCE_ERROR;
+        return LOG_CONVERSION_RESULT;
+    }
 }
 
 static void wire_mgr_main(void)
 {
+    DEBUG(DL_DEBUG, "State new %d old %d\n", state, old_state);
 
-    DEBUG(DL_VERBOSE, "State %d\n", state);
+    WIRE_state_t new_state = WIRE_SENTINEL_STATE;
+
     switch(state)
     {
+        case WIRE_READ_ROM:
+        case WIRE_READ_SCRATCHPAD:
+        case WIRE_WRITE_SCRATCHPAD:
         case START_CONVERSION:
-            state = handle_start_conversion();
+        case READ_CONVERSION_RESULT:
+            new_state = handle_reset_needed_state(state);
             break;
         case WAIT_FOR_CONVERTION:
-            state = handle_wait_for_conversion();
-            break;
-        case READ_CONVERSION_RESULT:
-            state = handle_read_conversion_results();
+            new_state = handle_wait_for_conversion();
             break;
         case LOG_CONVERSION_RESULT:
-            state = handle_log_conversion_results();
+            new_state = handle_log_conversion_results();
+            break;
+        case WIRE_ERROR_STATE:
+            new_state = handle_error_state();
             break;
         default:
             ASSERT(false);
             break;
     }
+
+    old_state = state;
+    state = new_state;
 }
 
-uint16_t WIRE_MGR_get_temperature(void)
+bool WIRE_MGR_get_temperature(uint16_t *out)
 {
-    return temperature;
+    ASSERT(out != NULL);
+
+    if(is_sensor_ready)
+    {
+        *out = temperature;
+        return true;
+    }
+    else
+    {
+        return false;
+    }
 }
 
 void WIRE_MGR_initialize(void)
 {
     const uint8_t resolution = pgm_read_byte(&wire_mgr_config.resolution);
-
-    if(!WIRE_reset())
-    {
-        ASSERT(false);
-    }
-
-    WIRE_send_byte(SKIP_ROM);
-    WIRE_send_byte(READ_SCRATCHPAD);
-
-    const uint8_t scratchpad_size =
-        sizeof(scratchpad.raw)/sizeof(scratchpad.raw[0]);
-
-    for(uint8_t i = 0u; i < scratchpad_size; i++)
-    {
-        scratchpad.raw[i] = WIRE_read_byte();
-    }
-
-    if(!WIRE_reset())
-    {
-        ASSERT(false);
-    }
-
-    WIRE_send_byte(SKIP_ROM);
-    WIRE_send_byte(WRITE_SCRATCHPAD);
-    WIRE_send_byte(scratchpad.th);
-    WIRE_send_byte(scratchpad.tl);
-    WIRE_send_byte(get_resolution_mask(resolution));
-
-    if(!WIRE_reset())
-    {
-        ASSERT(false);
-    }
-
-    WIRE_send_byte(SKIP_ROM);
-    WIRE_send_byte(READ_SCRATCHPAD);
-
-    for(uint8_t i = 0u; i < scratchpad_size; i++)
-    {
-        scratchpad.raw[i] = WIRE_read_byte();
-    }
-
     conversion_time = get_resolution_conv_time(resolution);
     SYSTEM_register_task(wire_mgr_main, TASK_PERIOD);
 }

@@ -35,9 +35,10 @@
 typedef struct
 {
     bool is_crc;
+    bool is_fake_allowed;
     uint8_t resolution;
 } WIRE_MGR_config_t;
 
-uint16_t WIRE_MGR_get_temperature(void);
+bool WIRE_MGR_get_temperature(uint16_t *out);
 void WIRE_MGR_initialize(void);
 #endif
