@@ -225,7 +225,7 @@ static uint8_t calc_crc_block(uint8_t crc, const uint8_t * buffer, size_t length
     return ret;
 }
 
-static bool is_crc_valid(uint8_t *buffer, uint8_t size, uint8_t exp_crc)
+static bool is_crc_valid(const uint8_t *buffer, uint8_t size, uint8_t exp_crc)
 {
     uint8_t crc = calc_crc_block(0U, buffer, size);
 
@@ -274,13 +274,10 @@ static WIRE_state_t handle_read_rom(void)
 
     read_bytes(rom_code.raw, rom_code_size);
 
-    if(is_crc)
+    if(is_crc && !is_crc_valid(rom_code.raw, rom_code_size - 1u, rom_code.crc))
     {
-        if(!is_crc_valid(rom_code.raw, rom_code_size - 1u, rom_code.crc))
-        {
-            result = LOG_CRC_ERROR;
-            return LOG_CONVERSION_RESULT;
-        }
+        result = LOG_CRC_ERROR;
+        return LOG_CONVERSION_RESULT;
     }
 
     if((rom_code.family_code != FAMILY_CODE) ||
@@ -309,13 +306,10 @@ static WIRE_state_t handle_read_scratchpad(void)
 
     read_scratchpad_bytes();
 
-    if(is_crc)
+    if(is_crc && !is_crc_valid(scratchpad.raw, (scratchpad_size - 1u), scratchpad.crc))
     {
-        if(!is_crc_valid(scratchpad.raw, (scratchpad_size - 1u), scratchpad.crc))
-        {
-            result = LOG_CRC_ERROR;
-            return LOG_CONVERSION_RESULT;
-        }
+        result = LOG_CRC_ERROR;
+        return LOG_CONVERSION_RESULT;
     }
 
     if(!is_reserved_values_valid(scratchpad.reserved1, scratchpad.reserved3))
@@ -422,14 +416,7 @@ static WIRE_state_t handle_log_conversion_results(void)
     {
         case WIRE_SENTINEL_STATE:
         case WIRE_READ_ROM:
-            if(result == LOG_FAKE_SENSOR_ERROR)
-            {
-                return WIRE_ERROR_STATE;
-            }
-            else
-            {
-                return WIRE_READ_ROM;
-            }
+            return (result == LOG_FAKE_SENSOR_ERROR ? WIRE_ERROR_STATE: WIRE_READ_ROM);
         default:
             return START_CONVERSION;
     }
