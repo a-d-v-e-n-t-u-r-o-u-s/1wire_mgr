@@ -372,13 +372,10 @@ static WIRE_state_t handle_read_conversion_results(void)
 
     read_scratchpad_bytes();
 
-    if(is_crc)
+    if(is_crc && !is_crc_valid(scratchpad.raw, (scratchpad_size - 1U), scratchpad.crc))
     {
-        if(!is_crc_valid(scratchpad.raw, (scratchpad_size - 1u), scratchpad.crc))
-        {
-            result = LOG_CRC_ERROR;
-            return LOG_CONVERSION_RESULT;
-        }
+        result = LOG_CRC_ERROR;
+        return LOG_CONVERSION_RESULT;
     }
 
     temperature = get_temperature(scratchpad.temp_msb, scratchpad.temp_lsb);
@@ -394,21 +391,24 @@ static WIRE_state_t handle_log_conversion_results(void)
         case LOG_SUCCESS:
             DEBUG(DL_INFO, "1WIRE: 0x%04x[raw] %d.%04d[C]\n", temperature,
                     temperature >> 4U, (temperature & 0xFu)*625u);
+            wire_mgr_log[LOG_SUCCESS]++;
             break;
         case LOG_CRC_ERROR:
             DEBUG(DL_WARNING, "%s", "CRC error\n");
+            wire_mgr_log[LOG_CRC_ERROR]++;
             break;
         case LOG_NO_PRESENCE_ERROR:
             DEBUG(DL_WARNING, "%s", "No Presence\n");
+            wire_mgr_log[LOG_NO_PRESENCE_ERROR]++;
             break;
         case LOG_FAKE_SENSOR_ERROR:
             DEBUG(DL_ERROR, "%s", "Fake sensor\n");
+            wire_mgr_log[LOG_FAKE_SENSOR_ERROR]++;
             break;
         default:
             ASSERT(false);
     }
 
-    wire_mgr_log[result]++;
     DEBUG(DL_INFO, "OK[%d] CRC[%d] PRE[%d] FAKE[%d]\n",
             wire_mgr_log[0], wire_mgr_log[1], wire_mgr_log[2], wire_mgr_log[3]);
 
