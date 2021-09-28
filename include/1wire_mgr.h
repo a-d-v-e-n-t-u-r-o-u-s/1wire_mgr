@@ -39,6 +39,6 @@ typedef struct
     uint8_t resolution;
 } WIRE_MGR_config_t;
 
-bool WIRE_MGR_get_temperature(uint16_t *out);
+bool WIRE_MGR_get_temperature(int16_t *out);
 void WIRE_MGR_initialize(void);
 #endif

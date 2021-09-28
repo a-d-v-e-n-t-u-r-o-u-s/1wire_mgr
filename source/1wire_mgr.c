@@ -119,7 +119,7 @@ static WIRE_state_t old_state = WIRE_SENTINEL_STATE;
 static bool is_sensor_ready;
 static uint8_t result;
 static uint8_t wire_mgr_log[LOG_SENTINEL];
-static uint16_t temperature;
+static int16_t temperature;
 static uint16_t conversion_time;
 static uint32_t start_conv_time;
 static WIRE_scratchpad_space_t scratchpad;
@@ -137,9 +137,9 @@ static inline bool is_reserved_values_valid(uint8_t res1, uint8_t res3)
     }
 }
 
-static inline uint16_t get_temperature(uint8_t msb, uint8_t lsb)
+static inline int16_t get_temperature(uint8_t msb, uint8_t lsb)
 {
-    return (((uint16_t) msb << CHAR_BIT) | lsb);
+    return (((int16_t) msb << CHAR_BIT) | lsb);
 }
 
 static inline uint16_t get_resolution_conv_time(uint8_t resolution)
@@ -491,7 +491,7 @@ static void wire_mgr_main(void)
     state = new_state;
 }
 
-bool WIRE_MGR_get_temperature(uint16_t *out)
+bool WIRE_MGR_get_temperature(int16_t *out)
 {
     ASSERT(out != NULL);
 
