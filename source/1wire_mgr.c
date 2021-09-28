@@ -139,7 +139,7 @@ static inline bool is_reserved_values_valid(uint8_t res1, uint8_t res3)
 
 static inline int16_t get_temperature(uint8_t msb, uint8_t lsb)
 {
-    return (int16_t)(((uint16_t)(msb << CHAR_BIT)) | lsb);
+    return (int16_t)(((uint16_t)msb << CHAR_BIT) | lsb);
 }
 
 static inline uint16_t get_resolution_conv_time(uint8_t resolution)
