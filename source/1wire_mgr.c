@@ -339,7 +339,7 @@ static WIRE_state_t handle_write_scratchpad(void)
     WIRE_send_byte(scratchpad.th);
     WIRE_send_byte(scratchpad.tl);
     WIRE_send_byte(get_resolution_mask(resolution));
-    /* TODO(DB) here should be read back of register */
+    /* \todo (DB) here should be read back of register */
     return START_CONVERSION;
 }
 
