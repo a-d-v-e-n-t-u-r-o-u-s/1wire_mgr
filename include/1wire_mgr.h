@@ -27,18 +27,52 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+/*!
+ *
+ * \addtogroup 1wire_mgr
+ * \ingroup modules
+ * \brief 1Wire manager for DS18B20 chips
+ */
+
+/*@{*/
+
+/*!
+ *
+ * \addtogroup DS18B20_resolution
+ * \ingroup 1wire_mgr
+ * \brief DS18B20 resolution settings
+ */
+/*@{*/
 #define WIRE_9BIT_RESOLUTION            (0u)
 #define WIRE_10BIT_RESOLUTION           (1u)
 #define WIRE_11BIT_RESOLUTION           (2u)
 #define WIRE_12BIT_RESOLUTION           (3u)
+/*@}*/
 
+/*!
+ * \brief 1Wire manager configuration structure
+ */
 typedef struct
 {
-    bool is_crc;
-    bool is_fake_allowed;
-    uint8_t resolution;
+    bool is_crc; /*!< sets crc checking */
+    bool is_fake_allowed; /*!< allows fake DS18B20 chips */
+    uint8_t resolution; /*!< sets resolution of DS18B20 temperature readings */
 } WIRE_MGR_config_t;
 
+/*!
+ * \brief Gets last read temperature
+ *
+ * \param out storage for read temperature
+ *
+ * \retval true valid temperature value read
+ * \retval false sensor is not ready yet
+ */
 bool WIRE_MGR_get_temperature(int16_t *out);
+
+/*!
+ * \brief Initializes 1Wire manager
+ */
 void WIRE_MGR_initialize(void);
+
+/*@}*/
 #endif

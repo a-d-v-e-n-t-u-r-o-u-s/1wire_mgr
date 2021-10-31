@@ -40,54 +40,105 @@
 #define LOG_FAKE_SENSOR_ERROR       (3u)
 #define LOG_SENTINEL                (4U)
 
-/* ROM commands */
+/*!
+ *
+ * \addtogroup DS18B20_rom_cmds
+ * \ingroup 1wire_mgr
+ * \brief DS18B20 ROM commands
+ */
+/*@{*/
 #define SEARCH_ROM                  (0xF0U)
 #define READ_ROM                    (0x33U)
 #define MATCH_ROM                   (0x55U)
 #define SKIP_ROM                    (0xCCU)
 #define ALARM_SEARCH                (0xECU)
+/*@}*/
 
-/* Function commands */
+/*!
+ *
+ * \addtogroup DS18B20_func_cmds
+ * \ingroup 1wire_mgr
+ * \brief DS18B20 function commands
+ */
+/*@{*/
 #define CONVERT_T                   (0x44U)
 #define WRITE_SCRATCHPAD            (0x4EU)
 #define READ_SCRATCHPAD             (0xBEU)
 #define COPY_SCRATCHPAD             (0x48U)
 #define RECALL_EEPROM               (0xB8U)
 #define READ_POWER_SUPPLY           (0xB4U)
+/*@}*/
 
-/* Configuration register masks */
+/*!
+ *
+ * \addtogroup DS18B20_conf_reg_mask
+ * \ingroup 1wire_mgr
+ * \brief DS18B20 configuration register masks
+ */
+/*@{*/
 #define RESOLUTION_9BIT_MASK        (0x1Fu)
 #define RESOLUTION_10BIT_MASK       (0x3Fu)
 #define RESOLUTION_11BIT_MASK       (0x5Fu)
 #define RESOLUTION_12BIT_MASK       (0x7Fu)
+/*@}*/
 
+/*!
+ *
+ * \addtogroup DS18B20_conv_times
+ * \ingroup 1wire_mgr
+ * \brief DS18B20 convertions times in regard to resolution
+ */
+/*@{*/
 #define CONVERSION_TIME_9BIT        (94u)
 #define CONVERSION_TIME_10BIT       (188u)
 #define CONVERSION_TIME_11BIT       (375u)
 #define CONVERSION_TIME_12BIT       (750u)
+/*@}*/
 
+/*!
+ * \brief Reserved value No1 for genuine DS1820 chips
+ */
 #define RESERVED1_VALUE             (0xFFu)
+
+/*!
+ * \brief Reserved value No3 for genuine DS1820 chips
+ */
 #define RESERVED3_VALUE             (0x10u)
 
+/*!
+ * \brief Family code for genuine DS1820 chips stored in ROM space
+ */
 #define FAMILY_CODE                 (0x28u)
 
+/*!
+ * \brief 1Wire mgr task period
+ */
 #define TASK_PERIOD                 (1000u)
 
+/*!
+ * \brief States of 1Wire manager
+ */
 typedef enum
 {
-    WIRE_READ_ROM,
-    WIRE_READ_SCRATCHPAD,
-    WIRE_WRITE_SCRATCHPAD,
-    START_CONVERSION,
-    WAIT_FOR_CONVERTION,
-    READ_CONVERSION_RESULT,
-    LOG_CONVERSION_RESULT,
-    WIRE_ERROR_STATE,
-    WIRE_SENTINEL_STATE,
+    WIRE_READ_ROM, /*!< read rom space */
+    WIRE_READ_SCRATCHPAD, /*!< read scratchpad space */
+    WIRE_WRITE_SCRATCHPAD, /*!< write scratchpad space, configure sensor */
+    START_CONVERSION, /*!< start temperature conversion */
+    WAIT_FOR_CONVERTION, /*!< wait till conversion is finished */
+    READ_CONVERSION_RESULT, /*!< read conversion result */
+    LOG_CONVERSION_RESULT, /*!< log conversion results */
+    WIRE_ERROR_STATE, /*!< error state */
+    WIRE_SENTINEL_STATE, /*!< invalid, unused sentinel state */
 } WIRE_state_t;
 
+/*!
+ * \brief Union represents scratchpad space of DS18B20 chip
+ */
 typedef union
 {
+    /*!
+     * \brief Scratchpad space as structure of fields
+     */
     struct
     {
         uint8_t temp_lsb;
@@ -100,17 +151,29 @@ typedef union
         uint8_t reserved3;
         uint8_t crc;
     };
+    /*!
+     * \brief Scratchpad space as array
+     */
     uint8_t raw[9];
 } WIRE_scratchpad_space_t;
 
+/*!
+ * \brief Union represents rom space of DS18B20 chip
+ */
 typedef union
 {
+    /*!
+     * \brief Rom space as structure of fields
+     */
     struct
     {
         uint8_t family_code;
         uint8_t serial_no[6U];
         uint8_t crc;
     };
+    /*!
+     * \brief Rom space as array
+     */
     uint8_t raw[8];
 } WIRE_rom_code_space_t;
 
@@ -125,6 +188,15 @@ static uint32_t start_conv_time;
 static WIRE_scratchpad_space_t scratchpad;
 static WIRE_rom_code_space_t rom_code;
 
+/*!
+ * \brief Checks whatever reserved values are valid as for genuine sensor
+ *
+ * \param res1 reserved value No1 to be checked
+ * \param res3 reserved value No3 to be checked
+ *
+ * \retval true reserved values are valid
+ * \retval false reserved values are invalid
+ */
 static inline bool is_reserved_values_valid(uint8_t res1, uint8_t res3)
 {
     if((res1 == RESERVED1_VALUE) && (res3 == RESERVED3_VALUE))
@@ -135,11 +207,26 @@ static inline bool is_reserved_values_valid(uint8_t res1, uint8_t res3)
     return false;
 }
 
+/*!
+ * \brief Composes temperature from registers values
+ *
+ * \param msb most significant byte of temperature
+ * \param lsb least significant byte of temperature
+ *
+ * \returns temperature as signed value
+ */
 static inline int16_t get_temperature(uint8_t msb, uint8_t lsb)
 {
     return (int16_t)(((uint16_t)msb << CHAR_BIT) | lsb);
 }
 
+/*!
+ * \brief Gets convertion time for given resolution
+ *
+ * \param resolution resolution for getting convertion time
+ *
+ * \returns convertion time
+ */
 static inline uint16_t get_resolution_conv_time(uint8_t resolution)
 {
     switch(resolution)
@@ -160,6 +247,13 @@ static inline uint16_t get_resolution_conv_time(uint8_t resolution)
     return CONVERSION_TIME_9BIT;
 }
 
+/*!
+ * \brief Gets resolution mask for given resolution
+ *
+ * \param resolution resolution for getting mask
+ *
+ * \returns resolution mask
+ */
 static inline uint8_t get_resolution_mask(uint8_t resolution)
 {
     switch(resolution)
@@ -180,6 +274,14 @@ static inline uint8_t get_resolution_mask(uint8_t resolution)
     return RESOLUTION_9BIT_MASK;
 }
 
+/*!
+ * \brief Calculates crc for given initial crc and data
+ *
+ * \param crc initial crc
+ * \param data data to be included in crc calculation
+ *
+ * \returns calculated crc
+ */
 static uint8_t calc_crc(uint8_t crc, uint8_t data)
 {
     /* https://www.maximintegrated.com/en/app-notes/index.mvp/id/27 */
@@ -205,6 +307,15 @@ static uint8_t calc_crc(uint8_t crc, uint8_t data)
     return pgm_read_byte(&table[crc ^ data]);
 }
 
+/*!
+ * \brief Calculates crc for given buffer
+ *
+ * \param crc initial crc
+ * \param buffer block of data over which crc is going to be calculated
+ * \param length length of data block
+ *
+ * \returns calculated crc
+ */
 static uint8_t calc_crc_block(uint8_t crc, const uint8_t * buffer, size_t length)
 {
     const uint8_t *buff = buffer;
@@ -223,6 +334,16 @@ static uint8_t calc_crc_block(uint8_t crc, const uint8_t * buffer, size_t length
     return ret;
 }
 
+/*!
+ * \brief Checks if calculated crc over data block is as expected
+ *
+ * \param buffer block of data for crc calculation
+ * \param size length of block of data
+ * \param exp_crc expected crc
+ *
+ * \retval true crcs are equal
+ * \retval false crcs are different
+ */
 static bool is_crc_valid(const uint8_t *buffer, uint8_t size, uint8_t exp_crc)
 {
     uint8_t crc = calc_crc_block(0U, buffer, size);
@@ -237,6 +358,12 @@ static bool is_crc_valid(const uint8_t *buffer, uint8_t size, uint8_t exp_crc)
     return true;
 }
 
+/*!
+ * \brief Reads bytes from 1Wire interface
+ *
+ * \param buffer output storage for read data
+ * \param size size of output storage
+ */
 static void read_bytes(uint8_t *buffer, uint8_t size)
 {
     for(uint8_t i = 0U; i < size; i++)
@@ -247,6 +374,9 @@ static void read_bytes(uint8_t *buffer, uint8_t size)
     DEBUG_DUMP_HEX(DL_DEBUG, buffer, size);
 }
 
+/*!
+ * \brief Reads scratchpad space of sensor
+ */
 static void read_scratchpad_bytes(void)
 {
     const uint8_t scratchpad_size =
@@ -260,6 +390,11 @@ static void read_scratchpad_bytes(void)
     DEBUG_DUMP_HEX(DL_DEBUG, scratchpad.raw, scratchpad_size);
 }
 
+/*!
+ * \brief Handles \ref WIRE_READ_ROM state
+ *
+ * \returns next state
+ */
 static WIRE_state_t handle_read_rom(void)
 {
     const bool is_crc = pgm_read_byte(&wire_mgr_config.is_crc);
@@ -294,6 +429,11 @@ static WIRE_state_t handle_read_rom(void)
     return WIRE_READ_SCRATCHPAD;
 }
 
+/*!
+ * \brief Handles \ref WIRE_READ_ROM state
+ *
+ * \returns next state
+ */
 static WIRE_state_t handle_read_scratchpad(void)
 {
     const bool is_crc = pgm_read_byte(&wire_mgr_config.is_crc);
@@ -326,6 +466,11 @@ static WIRE_state_t handle_read_scratchpad(void)
     return WIRE_WRITE_SCRATCHPAD;
 }
 
+/*!
+ * \brief Handles \ref WIRE_WRITE_SCRATCHPAD state
+ *
+ * \returns next state
+ */
 static WIRE_state_t handle_write_scratchpad(void)
 {
     const uint8_t resolution = pgm_read_byte(&wire_mgr_config.resolution);
@@ -339,6 +484,11 @@ static WIRE_state_t handle_write_scratchpad(void)
     return START_CONVERSION;
 }
 
+/*!
+ * \brief Handles \ref START_CONVERSION state
+ *
+ * \returns next state
+ */
 static WIRE_state_t handle_start_conversion(void)
 {
     WIRE_send_byte(SKIP_ROM);
@@ -347,6 +497,11 @@ static WIRE_state_t handle_start_conversion(void)
     return WAIT_FOR_CONVERTION;
 }
 
+/*!
+ * \brief Handles \ref WAIT_FOR_CONVERTION state
+ *
+ * \returns next state
+ */
 static WIRE_state_t handle_wait_for_conversion(void)
 {
     if(SYSTEM_timer_tick_difference(start_conv_time,
@@ -358,6 +513,11 @@ static WIRE_state_t handle_wait_for_conversion(void)
     return WAIT_FOR_CONVERTION;
 }
 
+/*!
+ * \brief Handles \ref READ_CONVERSION_RESULT state
+ *
+ * \returns next state
+ */
 static WIRE_state_t handle_read_conversion_results(void)
 {
     const bool is_crc = pgm_read_byte(&wire_mgr_config.is_crc);
@@ -378,6 +538,11 @@ static WIRE_state_t handle_read_conversion_results(void)
     return LOG_CONVERSION_RESULT;
 }
 
+/*!
+ * \brief Handles \ref LOG_CONVERSION_RESULT state
+ *
+ * \returns next state
+ */
 static WIRE_state_t handle_log_conversion_results(void)
 {
     switch(result)
@@ -416,12 +581,24 @@ static WIRE_state_t handle_log_conversion_results(void)
     }
 }
 
+/*!
+ * \brief Handles \ref WIRE_ERROR_STATE state
+ *
+ * \returns next state
+ */
 static WIRE_state_t handle_error_state(void)
 {
     is_sensor_ready = false;
     return WIRE_ERROR_STATE;
 }
 
+/*!
+ * \brief Handles states, which need sensor reset
+ *
+ * \param s state to be handled
+ *
+ * \returns next state
+ */
 static WIRE_state_t handle_reset_needed_state(WIRE_state_t s)
 {
     if(WIRE_reset())
@@ -450,6 +627,9 @@ static WIRE_state_t handle_reset_needed_state(WIRE_state_t s)
     return LOG_CONVERSION_RESULT;
 }
 
+/*!
+ * \brief 1Wire manager task function
+ */
 static void wire_mgr_main(void)
 {
     DEBUG(DL_DEBUG, "State new %d old %d\n", state, old_state);
@@ -492,6 +672,7 @@ bool WIRE_MGR_get_temperature(int16_t *out)
         *out = temperature;
         return true;
     }
+
     return false;
 }
 
