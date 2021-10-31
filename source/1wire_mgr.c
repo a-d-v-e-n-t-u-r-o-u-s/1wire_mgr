@@ -108,7 +108,7 @@ typedef union
     struct
     {
         uint8_t family_code;
-        uint8_t serial_no[6u];
+        uint8_t serial_no[6U];
         uint8_t crc;
     };
     uint8_t raw[8];
@@ -131,10 +131,8 @@ static inline bool is_reserved_values_valid(uint8_t res1, uint8_t res3)
     {
         return true;
     }
-    else
-    {
-        return false;
-    }
+
+    return false;
 }
 
 static inline int16_t get_temperature(uint8_t msb, uint8_t lsb)
@@ -235,15 +233,13 @@ static bool is_crc_valid(const uint8_t *buffer, uint8_t size, uint8_t exp_crc)
                 exp_crc, crc);
         return false;
     }
-    else
-    {
-        return true;
-    }
+
+    return true;
 }
 
 static void read_bytes(uint8_t *buffer, uint8_t size)
 {
-    for(uint8_t i = 0u; i < size; i++)
+    for(uint8_t i = 0U; i < size; i++)
     {
         buffer[i] = WIRE_read_byte();
     }
@@ -274,15 +270,15 @@ static WIRE_state_t handle_read_rom(void)
 
     read_bytes(rom_code.raw, rom_code_size);
 
-    if(is_crc && !is_crc_valid(rom_code.raw, rom_code_size - 1u, rom_code.crc))
+    if(is_crc && !is_crc_valid(rom_code.raw, rom_code_size - 1U, rom_code.crc))
     {
         result = LOG_CRC_ERROR;
         return LOG_CONVERSION_RESULT;
     }
 
     if((rom_code.family_code != FAMILY_CODE) ||
-            (rom_code.serial_no[4] != 0u) ||
-            (rom_code.serial_no[5] != 0u))
+            (rom_code.serial_no[4] != 0U) ||
+            (rom_code.serial_no[5] != 0U))
     {
         const bool is_fake_allowed  = pgm_read_byte(&wire_mgr_config.is_fake_allowed);
 
@@ -306,7 +302,7 @@ static WIRE_state_t handle_read_scratchpad(void)
 
     read_scratchpad_bytes();
 
-    if(is_crc && !is_crc_valid(scratchpad.raw, (scratchpad_size - 1u), scratchpad.crc))
+    if(is_crc && !is_crc_valid(scratchpad.raw, (scratchpad_size - 1U), scratchpad.crc))
     {
         result = LOG_CRC_ERROR;
         return LOG_CONVERSION_RESULT;
@@ -358,10 +354,8 @@ static WIRE_state_t handle_wait_for_conversion(void)
     {
         return READ_CONVERSION_RESULT;
     }
-    else
-    {
-        return WAIT_FOR_CONVERTION;
-    }
+
+    return WAIT_FOR_CONVERTION;
 }
 
 static WIRE_state_t handle_read_conversion_results(void)
@@ -451,11 +445,9 @@ static WIRE_state_t handle_reset_needed_state(WIRE_state_t s)
 
         return WIRE_READ_ROM;
     }
-    else
-    {
-        result = LOG_NO_PRESENCE_ERROR;
-        return LOG_CONVERSION_RESULT;
-    }
+
+    result = LOG_NO_PRESENCE_ERROR;
+    return LOG_CONVERSION_RESULT;
 }
 
 static void wire_mgr_main(void)
@@ -500,10 +492,7 @@ bool WIRE_MGR_get_temperature(int16_t *out)
         *out = temperature;
         return true;
     }
-    else
-    {
-        return false;
-    }
+    return false;
 }
 
 void WIRE_MGR_initialize(void)
